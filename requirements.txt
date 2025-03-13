@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+numpy
+opencv-python-headless
+ultralytics
+httpx
+python-jose
+passlib
+ 
