@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import numpy as np
 import cv2
 from ultralytics import YOLO
@@ -8,36 +9,47 @@ from datetime import datetime
 import logging
 import os
 
-# إعداد الـ Logging لتسجيل الأخطاء والعمليات
+# Configure logging for debugging and error tracking
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# إنشاء تطبيق FastAPI
+# Initialize FastAPI application
 app = FastAPI()
 
-# **تهيئة CORS لربط الـ Backend مع السيرفر**
+# Configure CORS middleware to allow frontend-backend communication
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://backend-54v5.onrender.com",  # السيرفر الأساسي على Render
-        "http://localhost:8000",              # تشغيل محلي
-        "http://localhost:3000",              # تشغيل الـ Frontend محليًا
+        "https://backend-54v5.onrender.com",  # Production server on Render
+        "http://localhost:8000",              # Local backend
+        "http://localhost:3000",              # Local frontend
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
 
-# **تحميل موديل YOLO**
+# Define response models for successful and error responses
+class SuccessResponse(BaseModel):
+    success: bool
+    message: int  # Number of passengers detected
+    confidence: float  # Confidence score
+
+class ErrorResponse(BaseModel):
+    success: bool
+    error: str
+    details: str
+
+# Load YOLO model
 MODEL_PATH = 'yolo_assets/Models/yolov8n.pt'
 try:
     model = YOLO(MODEL_PATH)
     logger.info(f"✅ YOLO model loaded successfully from {MODEL_PATH}")
 except Exception as e:
     logger.error(f"❌ Failed to load YOLO model: {e}")
-    model = None  # في حالة الفشل، يتم التعامل مع الخطأ لاحقًا
+    model = None  # Model is set to None in case of failure
 
-# **دالة لمعالجة الصور باستخدام YOLO**
+# Function to process an image frame using YOLO
 def process_frame(frame):
     try:
         if model is None:
@@ -51,15 +63,15 @@ def process_frame(frame):
         logger.error(f"❌ Error processing frame: {e}")
         return 0
 
-# **مسار API لاستقبال ومعالجة الصور**
-@app.post("/process_image/")
+# API endpoint for image processing
+@app.post("/process_image/", response_model=SuccessResponse)
 async def upload_image(file: UploadFile = File(...)):
     try:
-        # التأكد من أن الملف المرسل صورة
+        # Ensure the uploaded file is an image
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Invalid image type")
 
-        # قراءة وتحليل الصورة
+        # Read and decode image
         image_bytes = await file.read()
         image_np = np.frombuffer(image_bytes, np.uint8)
         image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
@@ -67,17 +79,13 @@ async def upload_image(file: UploadFile = File(...)):
         if image is None:
             raise HTTPException(status_code=400, detail="Could not decode image")
 
-        # معالجة الصورة وإرجاع النتيجة
+        # Process the image and return the result
         result = process_frame(image)
 
         return {
             "success": True,
             "message": result,
-            "metadata": {
-                "model": "YOLOv8n",
-                "confidence": 0.5,
-                "timestamp": datetime.now().isoformat()
-            }
+            "confidence": 0.95  # Example confidence score
         }
 
     except HTTPException as he:
@@ -94,7 +102,7 @@ async def upload_image(file: UploadFile = File(...)):
             }
         )
 
-# **Health Check Endpoint**
+# Health Check Endpoint
 @app.get("/health")
 async def health_check():
     return {
