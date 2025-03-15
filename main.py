@@ -12,9 +12,10 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# إنشاء تطبيق FastAPI
 app = FastAPI()
 
-# **تهيئة CORS لربط الـ Backend على Render مع السيرفر**
+# **تهيئة CORS لربط الـ Backend مع السيرفر**
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -31,9 +32,9 @@ app.add_middleware(
 MODEL_PATH = 'yolo_assets/Models/yolov8n.pt'
 try:
     model = YOLO(MODEL_PATH)
-    logger.info(f"YOLO model loaded successfully from {MODEL_PATH}")
+    logger.info(f"✅ YOLO model loaded successfully from {MODEL_PATH}")
 except Exception as e:
-    logger.error(f"Failed to load YOLO model: {e}")
+    logger.error(f"❌ Failed to load YOLO model: {e}")
     model = None  # في حالة الفشل، يتم التعامل مع الخطأ لاحقًا
 
 # **دالة لمعالجة الصور باستخدام YOLO**
@@ -47,7 +48,7 @@ def process_frame(frame):
         n_detection = len(boxes)
         return n_detection
     except Exception as e:
-        logger.error(f"Error processing frame: {e}")
+        logger.error(f"❌ Error processing frame: {e}")
         return 0
 
 # **مسار API لاستقبال ومعالجة الصور**
@@ -79,9 +80,25 @@ async def upload_image(file: UploadFile = File(...)):
             }
         }
 
+    except HTTPException as he:
+        logger.error(f"🚨 HTTP Error: {he.detail}")
+        raise
     except Exception as e:
-        logger.error(f"Error in image processing: {e}")
+        logger.error(f"❌ Unexpected error processing image: {e}")
         return JSONResponse(
-            content={"success": False, "error": "Image processing failed", "details": str(e)},
-            status_code=500
+            status_code=500,
+            content={
+                "success": False,
+                "error": "Image processing failed",
+                "details": str(e)
+            }
         )
+
+# **Health Check Endpoint**
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "operational",
+        "model_loaded": model is not None,
+        "timestamp": datetime.now().isoformat()
+    }
