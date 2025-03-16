@@ -64,13 +64,9 @@ def process_frame(frame):
         return 0
 
 # API endpoint for image processing
-@app.post("/process_image/", response_model=SuccessResponse)
+@app.post("/process_image/")
 async def upload_image(file: UploadFile = File(...)):
     try:
-        # Ensure the uploaded file is an image
-        if not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="Invalid image type")
-
         # Read and decode image
         image_bytes = await file.read()
         image_np = np.frombuffer(image_bytes, np.uint8)
