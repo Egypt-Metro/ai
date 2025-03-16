@@ -8,4 +8,6 @@ ultralytics
 httpx
 python-jose
 passlib
- 
+djangorestframework
+python-magic
+pillow
