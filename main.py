@@ -7,49 +7,54 @@ import cv2
 from ultralytics import YOLO
 from datetime import datetime
 import logging
-import os
 
-# Configure logging for debugging and error tracking
+# Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI application
+# Initialize FastAPI
 app = FastAPI()
 
-# Configure CORS middleware to allow frontend-backend communication
+# CORS settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://backend-54v5.onrender.com",  # Production server on Render
-        "http://localhost:8000",              # Local backend
-        "http://localhost:3000",              # Local frontend
+        "https://backend-54v5.onrender.com",
+        "http://localhost:8000",
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
 
-# Define response models for successful and error responses
+# Response Models
 class SuccessResponse(BaseModel):
     success: bool
-    message: int  # Number of passengers detected
-    confidence: float  # Confidence score
+    message: int
+    confidence: float
 
 class ErrorResponse(BaseModel):
     success: bool
     error: str
     details: str
 
-# Load YOLO model
+# Path to YOLO model
 MODEL_PATH = 'yolo_assets/Models/yolov8n.pt'
-try:
-    model = YOLO(MODEL_PATH)
-    logger.info(f"✅ YOLO model loaded successfully from {MODEL_PATH}")
-except Exception as e:
-    logger.error(f"❌ Failed to load YOLO model: {e}")
-    model = None  # Model is set to None in case of failure
+model = None  # Global model variable
 
-# Function to process an image frame using YOLO
+# Load model on startup
+@app.on_event("startup")
+def load_model():
+    global model
+    try:
+        model = YOLO(MODEL_PATH)
+        logger.info(f"✅ YOLO model loaded successfully from {MODEL_PATH}")
+    except Exception as e:
+        logger.error(f"❌ Failed to load YOLO model: {e}")
+        model = None
+
+# YOLO frame processing
 def process_frame(frame):
     try:
         if model is None:
@@ -57,17 +62,15 @@ def process_frame(frame):
 
         result = model(frame, conf=0.5, verbose=False, classes=[0])[0]
         boxes = result.boxes
-        n_detection = len(boxes)
-        return n_detection
+        return len(boxes)
     except Exception as e:
         logger.error(f"❌ Error processing frame: {e}")
         return 0
 
-# API endpoint for image processing
+# Image Upload API
 @app.post("/process_image/")
 async def upload_image(file: UploadFile = File(...)):
     try:
-        # Read and decode image
         image_bytes = await file.read()
         image_np = np.frombuffer(image_bytes, np.uint8)
         image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
@@ -75,13 +78,12 @@ async def upload_image(file: UploadFile = File(...)):
         if image is None:
             raise HTTPException(status_code=400, detail="Could not decode image")
 
-        # Process the image and return the result
         result = process_frame(image)
 
         return {
             "success": True,
             "message": result,
-            "confidence": 0.95  # Example confidence score
+            "confidence": 0.95
         }
 
     except HTTPException as he:
@@ -98,11 +100,10 @@ async def upload_image(file: UploadFile = File(...)):
             }
         )
 
-# Health Check Endpoint
+# Lightweight Health Check
 @app.get("/health")
 async def health_check():
     return {
-        "status": "operational",
-        "model_loaded": model is not None,
-        "timestamp": datetime.now().isoformat()
+        "status": "ok",
+
     }
